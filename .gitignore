@@ -1,0 +1,9 @@
+# python
+__pycache__/
+*.pyc
+
+# virtual environments
+.env
+
+# noteboooks
+explore.ipynb
