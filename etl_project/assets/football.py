@@ -4,7 +4,8 @@ import time
 from loguru import logger
 from sqlalchemy import Table, MetaData
 import pandas as pd
-#from datetime import datetime, timezone
+import numpy as np
+from datetime import datetime, timezone
 
 
 def extract_competitions(football_api_client: FootballDataAPI):
@@ -34,6 +35,7 @@ def extract_matches_full(football_api_client: FootballDataAPI, comp_ids: list[in
         time.sleep(7) #the free api only allows 10 calls per minute, so we will stagger our calls
 
     df = pd.json_normalize(matches, sep="_")
+    
     return df
 
 
@@ -43,13 +45,26 @@ def transform(df_football: pd.DataFrame) -> pd.DataFrame:
 
     columns_to_drop = [
         "referees",
+        "area_flag"
         "odds_msg",
         "homeTeam_crest",
         "competition_emblem",
         "awayTeam_crest"
     ]
-
     df_transformed = df_football.drop(columns=columns_to_drop, errors="ignore")
+
+    datetime_columns = ["utcDate", "lastUpdated"]
+    for col in datetime_columns:
+        df_transformed[col] = pd.to_datetime(df_transformed[col], utc=True)
+
+    date_columns = ["season_startDate", "season_endDate"]
+    for col in date_columns:
+        df_transformed[col] = pd.to_datetime(df_transformed[col]).dt.date
+
+
+ 
+    df_transformed = df_transformed.replace({np.nan:None})
+    df_transformed.columns = df_transformed.columns.str.lower()
 
     return df_transformed
 
