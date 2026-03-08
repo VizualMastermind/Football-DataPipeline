@@ -4,7 +4,7 @@ from sqlalchemy import Table, MetaData, Column, Integer, String, Float, DateTime
 from etl_project.assets.football import (
     extract_competitions,
     extract_matches_full,
-    transform
+    football_transform
 )
 from loguru import logger
 from dotenv import load_dotenv
@@ -50,7 +50,7 @@ def run_football_pipeline(pipeline_config:dict):
         df_football = extract_matches_full(football_api_client=football_api_client, comp_ids=comp_ids)
 
         logger.info("Transforming football dataframe")
-        df_transformed = transform(df_football=df_football)
+        df_transformed = football_transform(df_football=df_football)
 
         logger.info("Loading football data to postgres")
         metadata = MetaData()

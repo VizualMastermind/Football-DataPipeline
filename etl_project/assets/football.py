@@ -52,7 +52,7 @@ def extract_matches_incremental(football_api_client: FootballDataAPI, comp_ids: 
     
     return df
 
-def transform(df_football: pd.DataFrame) -> pd.DataFrame:
+def football_transform(df_football: pd.DataFrame) -> pd.DataFrame:
     """Transform the raw dataframes."""
 
     columns_to_drop = [
