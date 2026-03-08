@@ -9,4 +9,5 @@ __pycache__/
 explore.ipynb
 
 #in progress
-sql/
+run.py
+run.yaml
