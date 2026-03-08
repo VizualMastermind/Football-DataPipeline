@@ -1,0 +1,13 @@
+# python
+__pycache__/
+*.pyc
+
+# virtual environments
+.env
+
+# noteboooks
+explore.ipynb
+
+#in progress
+run.py
+run.yaml
