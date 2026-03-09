@@ -6,16 +6,19 @@ from etl_project.assets.football import (
     extract_matches_full,
     football_transform
 )
+from etl_project.assets.database_etl import calculate_chunk_size
 from loguru import logger
 from dotenv import load_dotenv
 import os
 from pathlib import Path
-import schedule
-import time
+# import schedule
+# import time
 import yaml
+import pandas as pd
+import numpy as np
 
 
-def run_football_pipeline(pipeline_config:dict):
+def run_pipeline(config: dict = None):
     
     logger.info("Starting football pipeline run")
 
@@ -46,7 +49,10 @@ def run_football_pipeline(pipeline_config:dict):
 
         logger.info("Extracting data from Football API")
         comp_ids = extract_competitions(football_api_client=football_api_client)
+        # these are available with the free plan: [2013, 2016, 2021, 2001, 2018, 2015, 2002, 2019, 2003, 2017, 2152, 2014, 2000]
+        #comp_ids = [2014, 2000]
 
+        df_football = pd.DataFrame()
         df_football = extract_matches_full(football_api_client=football_api_client, comp_ids=comp_ids)
 
         logger.info("Transforming football dataframe")
@@ -59,7 +65,6 @@ def run_football_pipeline(pipeline_config:dict):
             metadata,
             Column("id", Integer, primary_key=True),
             Column("utcdate", DateTime(timezone=True)),
-            Column("match_date", Date),
             Column("status", String),
             Column("matchday", Integer),
             Column("stage", String),
@@ -92,51 +97,58 @@ def run_football_pipeline(pipeline_config:dict):
             #Column("awayteam_crest", String),
             Column("score_winner", String),
             Column("score_duration", String),
-            Column("score_fulltime_home", Float),
-            Column("score_fulltime_away", Float),
-            Column("score_halftime_home", Float),
-            Column("score_halftime_away", Float),
-            Column("score_regulartime_home", Float),
-            Column("score_regulartime_away", Float),
-            Column("score_extratime_home", Float),
-            Column("score_extratime_away", Float),
-            Column("score_penalties_home", Float),
-            Column("score_penalties_away", Float)      
+            Column("score_fulltime_home", Integer),
+            Column("score_fulltime_away", Integer),
+            Column("score_halftime_home", Integer),
+            Column("score_halftime_away", Integer),
+            Column("score_regulartime_home", Integer),
+            Column("score_regulartime_away", Integer),
+            Column("score_extratime_home", Integer),
+            Column("score_extratime_away", Integer),
+            Column("score_penalties_home", Integer),
+            Column("score_penalties_away", Integer)      
             #Column("odds_msg", String)
         )
 
         # align dataframe with target table schema
         df_aligned = df_transformed.reindex(columns=table.columns.keys())
 
-        postgresql_client.upsert_in_chunks(data=df_aligned.to_dict(orient="records"), table=table, metadata=metadata)
+        # postgres doesn't like the nan values that get populated from reindex, so we will replace them with None, which it can correctly read as null
+        df_aligned = df_aligned.replace(np.nan, None)
+ 
+        chunksize = calculate_chunk_size(df_aligned)
 
+        postgresql_client.upsert_in_chunks(data=df_aligned.to_dict(orient="records"), table=table, metadata=metadata, chunksize=chunksize)
+        
         logger.success("Football pipeline run successful")
 
     except Exception as e:
         logger.error(f"Football pipeline failed with exception {e}")
 
 
-if __name__ == "__main__":
+# # if we want to this pipeline continuously, without cloud scheduler
+# if __name__ == "__main__":
 
-    load_dotenv()
+#     load_dotenv()
 
-    # get config variables
-    yaml_file_path = __file__.replace(".py", ".yaml")
-    if Path(yaml_file_path).exists():
-        with open(yaml_file_path) as yaml_file:
-            pipeline_config = yaml.safe_load(yaml_file)
-    else:
-        raise Exception(
-            f"Missing {yaml_file_path} file! Please create the yaml file with at least a `name` key for the pipeline name."
-        )
+#     # get config variables
+#     yaml_file_path = __file__.replace(".py", ".yaml")
+#     if Path(yaml_file_path).exists():
+#         with open(yaml_file_path) as yaml_file:
+#             pipeline_config = yaml.safe_load(yaml_file)
+#     else:
+#         raise Exception(
+#             f"Missing {yaml_file_path} file! Please create the yaml file with at least a `name` key for the pipeline name."
+#         )
 
-    # set schedule
-    schedule.every(pipeline_config.get("schedule").get("run_seconds")).seconds.do(
-        run_football_pipeline,
-        pipeline_config=pipeline_config,
-    )
+#     # set schedule
+#     schedule.every(pipeline_config.get("schedule").get("run_seconds")).seconds.do(
+#         run_pipeline,
+#         config=pipeline_config.get("config"),
+#     )
 
-    while True:
-        schedule.run_pending()
-        time.sleep(pipeline_config.get("schedule").get("poll_seconds"))
-  
+#     while True:
+#         schedule.run_pending()
+#         time.sleep(pipeline_config.get("schedule").get("poll_seconds"))
+
+

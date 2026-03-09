@@ -11,8 +11,8 @@ from etl_project.assets.alpaca_markets import (
 )
 import yaml
 from pathlib import Path
-import schedule
-import time
+# import schedule
+# import time
 from loguru import logger
 from jinja2 import Environment, FileSystemLoader
 from etl_project.assets.database_etl import (
@@ -23,7 +23,7 @@ from etl_project.assets.database_etl import (
 from graphlib import TopologicalSorter
 
 
-def pipeline(config: dict):
+def run_pipeline(config: dict):
 
     logger.info("Starting alpaca pipeline run")
 
@@ -55,7 +55,7 @@ def pipeline(config: dict):
         # environment for jinja templates to extract incremental values
         extract_template_environment = Environment(
             loader=FileSystemLoader(
-                pipeline_config.get("config").get("extract_template_path")
+                config.get("extract_template_path")
             )
         )
         
@@ -112,7 +112,7 @@ def pipeline(config: dict):
             # environment for jinja templates for tranformation tables
             extract_template_environment = Environment(
                 loader=FileSystemLoader(
-                    pipeline_config.get("config").get("transform_template_path")
+                    config.get("transform_template_path")
                 )
             )
 
@@ -138,27 +138,30 @@ def pipeline(config: dict):
     except Exception as e:
         logger.error(f"Alpaca pipeline failed with exception {e}")
 
-if __name__ == "__main__":
-    # set up environment variables
-    load_dotenv()
 
-    # get config variables
-    yaml_file_path = __file__.replace(".py", ".yaml")
-    if Path(yaml_file_path).exists():
-        with open(yaml_file_path) as yaml_file:
-            pipeline_config = yaml.safe_load(yaml_file)
-    else:
-        raise Exception(
-            f"Missing {yaml_file_path} file! Please create the yaml file with at least a `name` key for the pipeline name."
-        )
 
-    # set schedule
-    schedule.every(pipeline_config.get("schedule").get("run_seconds")).seconds.do(
-        pipeline,
-        config=pipeline_config.get("config"),
-    )
+# # if we want to this pipeline continuously, without cloud scheduler
+# if __name__ == "__main__":
+#     # set up environment variables
+#     load_dotenv()
 
-    while True:
-        schedule.run_pending()
-        time.sleep(pipeline_config.get("schedule").get("poll_seconds"))
+#     # get config variables
+#     yaml_file_path = __file__.replace(".py", ".yaml")
+#     if Path(yaml_file_path).exists():
+#         with open(yaml_file_path) as yaml_file:
+#             pipeline_config = yaml.safe_load(yaml_file)
+#     else:
+#         raise Exception(
+#             f"Missing {yaml_file_path} file! Please create the yaml file with at least a `name` key for the pipeline name."
+#         )
+
+#     # set schedule
+#     schedule.every(pipeline_config.get("schedule").get("run_seconds")).seconds.do(
+#         run_pipeline,
+#         config=pipeline_config.get("config"),
+#     )
+
+#     while True:
+#         schedule.run_pending()
+#         time.sleep(pipeline_config.get("schedule").get("poll_seconds"))
 
