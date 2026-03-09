@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import pandas as pd
 from etl_project.connectors.alpaca_markets import AlpacaMarketsApiClient
 from etl_project.connectors.postgresql import PostgreSqlClient
 from sqlalchemy import Table, MetaData, Column, Integer, String, Float, Numeric, BigInteger
@@ -14,7 +15,13 @@ import schedule
 import time
 from loguru import logger
 from jinja2 import Environment, FileSystemLoader
-from etl_project.assets.database_etl import extract_max_incremental
+from etl_project.assets.database_etl import (
+    extract_max_incremental,
+    SqlTransform,
+    dag_transform
+)
+from graphlib import TopologicalSorter
+
 
 def pipeline(config: dict):
 
@@ -54,10 +61,10 @@ def pipeline(config: dict):
         
         template = extract_template_environment.get_template("alpaca.sql")
         jinja_config = template.module.config
-        print(jinja_config)
 
         if postgresql_client.table_exists(jinja_config.get("table_name")) and jinja_config.get("extract_type") == "incremental":
-            start_date = extract_max_incremental(template=template, postgresql_client=postgresql_client)
+            incremental_max = extract_max_incremental(template=template, postgresql_client=postgresql_client)
+            start_date = (pd.Timestamp(incremental_max) + pd.Timedelta(nanoseconds = 1)).isoformat().replace("+00:00", "Z")        
         else:
             start_date = config.get("start_date")
 
@@ -66,37 +73,67 @@ def pipeline(config: dict):
         df_alpaca_markets = extract_alpaca_markets(
             alpaca_markets_client=alpaca_markets_client,
             stock_ticker=config.get("stock_ticker"),
-            start_date=start_date,
-            end_date=config.get("end_date"),
+            start_date=start_date
         )
 
         df_exchange_codes = extract_exchange_codes(
             exchange_codes_path=config.get("exchange_codes_path")
         )
 
-        # transform
-        logger.info("Transforming alpaca dataframes")
-        df_transformed = transform(
-            df=df_alpaca_markets, df_exchange_codes=df_exchange_codes
-        )
+        if df_alpaca_markets.empty:
+            logger.success("No new data from Alpaca API. Ending Alpaca pipeline.")
+        else:
+            # transform
+            logger.info("Transforming alpaca dataframes")
+            df_transformed = transform(
+                df=df_alpaca_markets, df_exchange_codes=df_exchange_codes
+            )
 
-        # load
-        logger.info("Loading alpaca data to postgres")
-        metadata = MetaData()
-        table = Table(
-            "alpaca",
-            metadata,
-            #Column("id", Numeric(20)),
-            Column("record_id", BigInteger, primary_key=True, autoincrement=True),  # unique ID auto-generated
-            Column("timestamp", String),
-            Column("exchange", String),
-            Column("price", Float),
-            Column("size", BigInteger),
-        )
+            # load
+            logger.info("Loading alpaca data to postgres")
+            metadata = MetaData()
+            table = Table(
+                "alpaca",
+                metadata,
+                #Column("id", Numeric(20)),
+                Column("record_id", BigInteger, primary_key=True, autoincrement=True),  # unique ID auto-generated
+                Column("timestamp", String),
+                Column("exchange", String),
+                Column("price", Float),
+                Column("size", BigInteger),
+            )
 
-        postgresql_client.upsert_in_chunks(data=df_transformed.to_dict(orient="records"), table=table, metadata=metadata)
+            postgresql_client.upsert_in_chunks(data=df_transformed.to_dict(orient="records"), table=table, metadata=metadata)
+            logger.info(f"Loaded {len(df_alpaca_markets)} new alpaca api records to database.")
 
-        logger.success("Alpaca pipeline run successful")
+            # transform (again)
+            logger.info("Creating dependent transformation tables in database")
+                
+            # environment for jinja templates for tranformation tables
+            extract_template_environment = Environment(
+                loader=FileSystemLoader(
+                    pipeline_config.get("config").get("transform_template_path")
+                )
+            )
+
+            serving_sales_cumulative = SqlTransform(
+                postgresql_client=postgresql_client,
+                environment=extract_template_environment,
+                table_name="alpaca_stats_1",
+            )
+            serving_sales_month_end = SqlTransform(
+                postgresql_client=postgresql_client,
+                environment=extract_template_environment,
+                table_name="alpaca_stats_2",
+            )
+
+            dag = TopologicalSorter()
+            dag.add(serving_sales_cumulative)
+            dag.add(serving_sales_month_end, serving_sales_cumulative)
+
+            dag_transform(dag)
+
+            logger.success(f"Alpaca pipeline run successful.")
 
     except Exception as e:
         logger.error(f"Alpaca pipeline failed with exception {e}")

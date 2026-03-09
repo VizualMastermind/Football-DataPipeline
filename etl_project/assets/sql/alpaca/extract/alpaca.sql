@@ -4,15 +4,15 @@
     "table_name": "alpaca"
 } %}
 
-select
-    record_id
-    timestamp
-    exchange
-    price
-    size
-from
-    {{ config["source_table_name"] }}
+-- select
+--     record_id
+--     timestamp
+--     exchange
+--     price
+--     size
+-- from
+--     {{ config["source_table_name"] }}
 
-{% if is_incremental %}
-    where {{ config["incremental_column"] }} > '{{ incremental_value }}'
-{% endif %}
+
+-- select max({{config["incremental_column"]}}) as incremental_value
+-- from {{config["table_name"]}}
