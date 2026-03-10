@@ -1,0 +1,10 @@
+pandas==1.4.3
+jinja2==3.1.2
+requests==2.28.1
+SQLAlchemy==1.4.39
+python-dotenv==1.0.0
+loguru==0.7.3
+pytest==7.1.2
+PyYAML==6.0
+numpy==1.26.4
+pg8000==1.29.1
