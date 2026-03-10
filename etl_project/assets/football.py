@@ -57,7 +57,7 @@ def football_transform(df_football: pd.DataFrame) -> pd.DataFrame:
 
     columns_to_drop = [
         "referees",
-        "area_flag"
+        "area_flag",
         "odds_msg",
         "homeTeam_crest",
         "competition_emblem",

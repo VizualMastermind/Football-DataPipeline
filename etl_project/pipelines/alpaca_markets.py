@@ -24,6 +24,33 @@ from graphlib import TopologicalSorter
 
 
 def run_pipeline(config: dict):
+    """
+    Run the end-to-end Alpaca data ETL pipeline.
+
+    This function extracts market data from the Alpaca API (and a CSV file),
+    transforms it, 
+    and loads it into a PostgreSQL database.
+
+    After loading, it executes dependent SQL transformations to populate additional tables.
+
+    The pipeline handles environment variables for API access and database connection, and supports incremental extraction based on the last recorded value.
+
+    Args:
+        config (dict): Configuration dictionary with required keys...
+            - "extract_template_path": Path to Jinja SQL template for extraction.
+            - "transform_template_path": Path to Jinja SQL templates for transformation tables.
+            - "exchange_codes_path": Path to CSV with exchange codes mapping.
+            - "stock_ticker": Stock ticker symbol to extract data for.
+            - "start_date": Default start date for extraction if no incremental data exists.
+
+    Raises:
+        Exception: If any step in the pipeline fails, including...
+            - Missing or invalid environment variables
+            - API errors during data extraction
+            - Data transformation errors
+            - Database connection or load failures
+            - Errors during execution of dependent SQL transformations
+    """
 
     logger.info("Starting alpaca pipeline run")
 
@@ -62,13 +89,14 @@ def run_pipeline(config: dict):
         template = extract_template_environment.get_template("alpaca.sql")
         jinja_config = template.module.config
 
+        # get max incremental value
         if postgresql_client.table_exists(jinja_config.get("table_name")) and jinja_config.get("extract_type") == "incremental":
             incremental_max = extract_max_incremental(template=template, postgresql_client=postgresql_client)
             start_date = (pd.Timestamp(incremental_max) + pd.Timedelta(nanoseconds = 1)).isoformat().replace("+00:00", "Z")        
         else:
             start_date = config.get("start_date")
 
-        # get max incremental value
+        # extract data
         logger.info("Extracting data from Alpaca API and CSV files")
         df_alpaca_markets = extract_alpaca_markets(
             alpaca_markets_client=alpaca_markets_client,
@@ -76,14 +104,15 @@ def run_pipeline(config: dict):
             start_date=start_date
         )
 
-        df_exchange_codes = extract_exchange_codes(
-            exchange_codes_path=config.get("exchange_codes_path")
-        )
-
         if df_alpaca_markets.empty:
             logger.success("No new data from Alpaca API. Ending Alpaca pipeline.")
         else:
             # transform
+
+            df_exchange_codes = extract_exchange_codes(
+                exchange_codes_path=config.get("exchange_codes_path")
+            )
+
             logger.info("Transforming alpaca dataframes")
             df_transformed = transform(
                 df=df_alpaca_markets, df_exchange_codes=df_exchange_codes

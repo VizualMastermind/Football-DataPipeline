@@ -123,7 +123,7 @@ def transform(df: pd.DataFrame, df_exchange_codes: pd.DataFrame) -> pd.DataFrame
             "u": "update"
         }
     )
-
+    
     keep_cols = ["timestamp", "exchange", "price", "size"]
     df_quotes_renamed.drop(columns=[col for col in df_quotes_renamed.columns if col not in keep_cols], inplace=True)
 
@@ -132,7 +132,7 @@ def transform(df: pd.DataFrame, df_exchange_codes: pd.DataFrame) -> pd.DataFrame
     df_quotes_renamed.loc[:, 'timestamp'] = df_quotes_renamed['timestamp'].apply(
         lambda ts: f"{ts.strftime('%Y-%m-%dT%H:%M:%S.%f')}{ts.nanosecond % 1000:03d}Z"
     )
-
+ 
     df_exchange = (
         pd.merge(
             left=df_quotes_renamed,

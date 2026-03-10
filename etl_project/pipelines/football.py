@@ -19,6 +19,26 @@ import numpy as np
 
 
 def run_pipeline(config: dict = None):
+    """
+    Run the end-to-end football data ETL pipeline.
+
+    This function extracts football data from the football-data.org API,
+    transforms it, 
+    and upserts the data into a PostgreSQL database.
+
+    The pipeline handles environment variables for API access and database connection.
+
+    Args:
+        config (dict, optional): Optional configuration dictionary for pipeline settings.
+            Currently not used, but can be extended for custom behavior.
+
+    Raises:
+        Exception: If any step in the pipeline fails, including:
+            - Missing or invalid environment variables
+            - API errors during data extraction
+            - Data transformation errors
+            - Database connection or upsert failures
+    """ 
     
     logger.info("Starting football pipeline run")
 
@@ -50,7 +70,6 @@ def run_pipeline(config: dict = None):
         logger.info("Extracting data from Football API")
         comp_ids = extract_competitions(football_api_client=football_api_client)
         # these are available with the free plan: [2013, 2016, 2021, 2001, 2018, 2015, 2002, 2019, 2003, 2017, 2152, 2014, 2000]
-        #comp_ids = [2014, 2000]
 
         df_football = pd.DataFrame()
         df_football = extract_matches_full(football_api_client=football_api_client, comp_ids=comp_ids)
