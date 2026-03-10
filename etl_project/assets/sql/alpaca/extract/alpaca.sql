@@ -1,7 +1,7 @@
 {% set config = {
     "extract_type": "incremental",
     "incremental_column": "timestamp",
-    "table_name": "alpaca"
+    "table_name": "alpaca_manu"
 } %}
 
 -- select

@@ -93,7 +93,7 @@ def run_pipeline(config: dict):
             logger.info("Loading alpaca data to postgres")
             metadata = MetaData()
             table = Table(
-                "alpaca",
+                "alpaca_manu",
                 metadata,
                 #Column("id", Numeric(20)),
                 Column("record_id", BigInteger, primary_key=True, autoincrement=True),  # unique ID auto-generated
@@ -116,21 +116,32 @@ def run_pipeline(config: dict):
                 )
             )
 
-            serving_sales_cumulative = SqlTransform(
+            alpaca_daily_data = SqlTransform(
                 postgresql_client=postgresql_client,
                 environment=extract_template_environment,
-                table_name="alpaca_stats_1",
+                table_name="alpaca_daily_data",  # basic overall daily stats
             )
-            serving_sales_month_end = SqlTransform(
+
+            alpaca_hourly_exchange_data = SqlTransform(
                 postgresql_client=postgresql_client,
                 environment=extract_template_environment,
-                table_name="alpaca_stats_2",
+                table_name="alpaca_hourly_exchange_data",  # basic hourly stats for each exchange
+            )
+
+            alpaca_hourly_exchange_metrics = SqlTransform(
+                postgresql_client=postgresql_client,
+                environment=extract_template_environment,
+                table_name="alpaca_hourly_exchange_metrics",  # metrics table depends on alpaca_hourly_exchange_data
             )
 
             dag = TopologicalSorter()
-            dag.add(serving_sales_cumulative)
-            dag.add(serving_sales_month_end, serving_sales_cumulative)
 
+            # dag nodes and dependencies
+            dag.add(alpaca_daily_data)
+            dag.add(alpaca_hourly_exchange_data)
+            dag.add(alpaca_hourly_exchange_metrics, alpaca_hourly_exchange_data)
+
+            # execute dag
             dag_transform(dag)
 
             logger.success(f"Alpaca pipeline run successful.")
