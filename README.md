@@ -31,9 +31,9 @@ Develop an ETL pipeline to process live sports data via football API. Another da
 1. Create RDS database
     - connect with pgAdmin, create database
 2. Make docker image from python pipeline
-    - make sure it runs locally before trying to put onto ECS
     - `docker build -t project1_etl:latest`
     - `docker run --env-file .env project1_etl:latest`
+    - make sure it runs locally before trying to put onto ECS
 3. In ECR create private repository
     - select the repository and then "view push commands", which we will use to push the docker image
     - but first we need to do `aws configure` and login
@@ -82,7 +82,11 @@ Develop an ETL pipeline to process live sports data via football API. Another da
     
 
 Note: you will have to provide the following environment variables to run the pipeline:
+
 FOOTBALL_API_TOKEN
+
 ALPACA_API_KEY_ID
+
 DB_PASSWORD
+
 SERVER_NAME
