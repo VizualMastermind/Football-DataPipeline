@@ -50,7 +50,7 @@ Develop an ETL pipeline to process live sports data via football API. Another da
 5. Create secrets in secret manager
     - when creating new secret select "other type of secret"
     - select plaintext, and replace anything in that field with your secret's value
-    - on the next page, the secret name will be how you access that secret
+    - give the secret a name
 6. Create task definition
     - in task definition in ECS, we will create new task definition
     - configuration...
@@ -63,7 +63,7 @@ Develop an ETL pipeline to process live sports data via football API. Another da
             - select image by: image tag
         - environment variables:
             - "key" here should match the environment variable name used in the python code
-            - "value" here is the name of the secret in our secret manager
+            - "value" here is the "Secret ARN" of the secret in our secret manager
 7. Run task
     - go to cluster -> tasks -> run new task
     - select the newly created task definition
