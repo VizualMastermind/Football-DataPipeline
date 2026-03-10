@@ -1,9 +1,0 @@
-config: 
-  exchange_codes_path: "./etl_project/data/exchange_codes.csv"
-  extract_template_path: "./etl_project/assets/sql/alpaca/extract"
-  transform_template_path: "./etl_project/assets/sql/alpaca/transform"
-  start_date: "2026-03-06"
-  stock_ticker: "MANU"
-schedule:
-  run_seconds: 10
-  poll_seconds: 2

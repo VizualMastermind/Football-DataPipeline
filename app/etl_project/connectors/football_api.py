@@ -52,7 +52,7 @@ class FootballDataAPI:
             competition_id: ID of the competition to fetch matches for.
 
         Returns:
-            List of match dictionaries satisfying the lastUpdated filter, including unfolded goal details.
+            List of match dictionaries for the given competition.
 
         Raises:
             requests.exceptions.HTTPError: If the API response code is not 200.

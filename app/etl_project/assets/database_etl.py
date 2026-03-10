@@ -88,3 +88,16 @@ def extract_max_incremental(
     """
     sql_response = postgresql_client.run_sql(sql)
     return sql_response[0].get("incremental_value")
+
+
+# added for this project
+def calculate_chunk_size(df: pd.DataFrame):
+    """
+    Trying to load too many values to postgres at once will give the following error: 'h' format requires -32768 <= number <= 32767"
+    This function takes the dataframe you want to upload, and will calculate the max allowable chunk size based on the dataframe dimsensions.
+    """
+    max_cells = 32767
+    num_columns = df.shape[1]
+    
+    max_rows_per_batch = max_cells // num_columns
+    return max_rows_per_batch

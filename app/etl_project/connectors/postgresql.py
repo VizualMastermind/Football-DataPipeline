@@ -2,7 +2,6 @@ from sqlalchemy import create_engine, Table, MetaData, Column, inspect
 from sqlalchemy.engine import URL
 from sqlalchemy.dialects import postgresql
 
-
 class PostgreSqlClient:
     """
     A client for querying postgresql database.
@@ -129,7 +128,7 @@ class PostgreSqlClient:
         self.engine.execute(upsert_statement)
 
     def upsert_in_chunks(
-        self, data: list[dict], table: Table, metadata: MetaData, chunksize: int = 1000
+        self, data: list[dict], table: Table, metadata: MetaData, chunksize: int = 100
     ) -> None:
         """
         Upserts data into a database table in chunks (e.g. 1000 rows at a time) in case of query timeouts or row limitations.
@@ -146,3 +145,4 @@ class PostgreSqlClient:
             self.upsert(
                 data=data[lower_bound:upper_bound], table=table, metadata=metadata
             )
+

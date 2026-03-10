@@ -57,13 +57,44 @@ def football_transform(df_football: pd.DataFrame) -> pd.DataFrame:
 
     columns_to_drop = [
         "referees",
-        "area_flag"
+        "area_flag",
         "odds_msg",
         "homeTeam_crest",
         "competition_emblem",
         "awayTeam_crest"
     ]
-    df_transformed = df_football.drop(columns=columns_to_drop, errors="ignore")
+
+    df_transformed = df_football.drop(columns=columns_to_drop, errors="ignore")    
+
+    # columns that should be integers if present...sometimes inconsistent what datatype the dataframe columns have
+    int_cols = [
+        "matchday",
+        "area_id",
+        "competition_id",
+        "season_id",
+        "current_Matchday",
+        "homeTeam_id",
+        "awayTeam_id",
+        "score_fullTime_home",
+        "score_fullTime_away",
+        "score_halfTime_home",
+        "score_halfTime_away",
+        "score_regularTime_home",
+        "score_regularTime_away",
+        "score_extraTime_home",
+        "score_extraTime_away",
+        "score_penalties_home",
+        "score_penalties_away"
+    ]
+
+    filtered_int_cols = [c for c in int_cols if c in df_transformed.columns]
+
+    # convert these columns safely to nullable integers
+    df_transformed[filtered_int_cols] = (
+        df_transformed[filtered_int_cols]
+        .apply(pd.to_numeric, errors="coerce")
+        .astype("Int64") 
+    )
 
     datetime_columns = ["utcDate", "lastUpdated"]
     for col in datetime_columns:
@@ -72,9 +103,6 @@ def football_transform(df_football: pd.DataFrame) -> pd.DataFrame:
     date_columns = ["season_startDate", "season_endDate"]
     for col in date_columns:
         df_transformed[col] = pd.to_datetime(df_transformed[col]).dt.date
-
-
-    df_transformed["match_date"] = df_transformed["utcdate"].dt.date
 
     df_transformed = df_transformed.replace({np.nan:None})
     df_transformed.columns = df_transformed.columns.str.lower()

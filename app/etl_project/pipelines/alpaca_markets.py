@@ -11,8 +11,8 @@ from etl_project.assets.alpaca_markets import (
 )
 import yaml
 from pathlib import Path
-import schedule
-import time
+# import schedule
+# import time
 from loguru import logger
 from jinja2 import Environment, FileSystemLoader
 from etl_project.assets.database_etl import (
@@ -23,7 +23,34 @@ from etl_project.assets.database_etl import (
 from graphlib import TopologicalSorter
 
 
-def pipeline(config: dict):
+def run_pipeline(config: dict):
+    """
+    Run the end-to-end Alpaca data ETL pipeline.
+
+    This function extracts market data from the Alpaca API (and a CSV file),
+    transforms it, 
+    and loads it into a PostgreSQL database.
+
+    After loading, it executes dependent SQL transformations to populate additional tables.
+
+    The pipeline handles environment variables for API access and database connection, and supports incremental extraction based on the last recorded value.
+
+    Args:
+        config (dict): Configuration dictionary with required keys...
+            - "extract_template_path": Path to Jinja SQL template for extraction.
+            - "transform_template_path": Path to Jinja SQL templates for transformation tables.
+            - "exchange_codes_path": Path to CSV with exchange codes mapping.
+            - "stock_ticker": Stock ticker symbol to extract data for.
+            - "start_date": Default start date for extraction if no incremental data exists.
+
+    Raises:
+        Exception: If any step in the pipeline fails, including...
+            - Missing or invalid environment variables
+            - API errors during data extraction
+            - Data transformation errors
+            - Database connection or load failures
+            - Errors during execution of dependent SQL transformations
+    """
 
     logger.info("Starting alpaca pipeline run")
 
@@ -55,20 +82,21 @@ def pipeline(config: dict):
         # environment for jinja templates to extract incremental values
         extract_template_environment = Environment(
             loader=FileSystemLoader(
-                pipeline_config.get("config").get("extract_template_path")
+                config.get("extract_template_path")
             )
         )
         
         template = extract_template_environment.get_template("alpaca.sql")
         jinja_config = template.module.config
 
+        # get max incremental value
         if postgresql_client.table_exists(jinja_config.get("table_name")) and jinja_config.get("extract_type") == "incremental":
             incremental_max = extract_max_incremental(template=template, postgresql_client=postgresql_client)
             start_date = (pd.Timestamp(incremental_max) + pd.Timedelta(nanoseconds = 1)).isoformat().replace("+00:00", "Z")        
         else:
             start_date = config.get("start_date")
 
-        # get max incremental value
+        # extract data
         logger.info("Extracting data from Alpaca API and CSV files")
         df_alpaca_markets = extract_alpaca_markets(
             alpaca_markets_client=alpaca_markets_client,
@@ -76,14 +104,15 @@ def pipeline(config: dict):
             start_date=start_date
         )
 
-        df_exchange_codes = extract_exchange_codes(
-            exchange_codes_path=config.get("exchange_codes_path")
-        )
-
         if df_alpaca_markets.empty:
             logger.success("No new data from Alpaca API. Ending Alpaca pipeline.")
         else:
             # transform
+
+            df_exchange_codes = extract_exchange_codes(
+                exchange_codes_path=config.get("exchange_codes_path")
+            )
+
             logger.info("Transforming alpaca dataframes")
             df_transformed = transform(
                 df=df_alpaca_markets, df_exchange_codes=df_exchange_codes
@@ -93,7 +122,7 @@ def pipeline(config: dict):
             logger.info("Loading alpaca data to postgres")
             metadata = MetaData()
             table = Table(
-                "alpaca",
+                "alpaca_manu",
                 metadata,
                 #Column("id", Numeric(20)),
                 Column("record_id", BigInteger, primary_key=True, autoincrement=True),  # unique ID auto-generated
@@ -112,25 +141,36 @@ def pipeline(config: dict):
             # environment for jinja templates for tranformation tables
             extract_template_environment = Environment(
                 loader=FileSystemLoader(
-                    pipeline_config.get("config").get("transform_template_path")
+                    config.get("transform_template_path")
                 )
             )
 
-            serving_sales_cumulative = SqlTransform(
+            alpaca_daily_data = SqlTransform(
                 postgresql_client=postgresql_client,
                 environment=extract_template_environment,
-                table_name="alpaca_stats_1",
+                table_name="alpaca_daily_data",  # basic overall daily stats
             )
-            serving_sales_month_end = SqlTransform(
+
+            alpaca_hourly_exchange_data = SqlTransform(
                 postgresql_client=postgresql_client,
                 environment=extract_template_environment,
-                table_name="alpaca_stats_2",
+                table_name="alpaca_hourly_exchange_data",  # basic hourly stats for each exchange
+            )
+
+            alpaca_hourly_exchange_metrics = SqlTransform(
+                postgresql_client=postgresql_client,
+                environment=extract_template_environment,
+                table_name="alpaca_hourly_exchange_metrics",  # metrics table depends on alpaca_hourly_exchange_data
             )
 
             dag = TopologicalSorter()
-            dag.add(serving_sales_cumulative)
-            dag.add(serving_sales_month_end, serving_sales_cumulative)
 
+            # dag nodes and dependencies
+            dag.add(alpaca_daily_data)
+            dag.add(alpaca_hourly_exchange_data)
+            dag.add(alpaca_hourly_exchange_metrics, alpaca_hourly_exchange_data)
+
+            # execute dag
             dag_transform(dag)
 
             logger.success(f"Alpaca pipeline run successful.")
@@ -138,27 +178,30 @@ def pipeline(config: dict):
     except Exception as e:
         logger.error(f"Alpaca pipeline failed with exception {e}")
 
-if __name__ == "__main__":
-    # set up environment variables
-    load_dotenv()
 
-    # get config variables
-    yaml_file_path = __file__.replace(".py", ".yaml")
-    if Path(yaml_file_path).exists():
-        with open(yaml_file_path) as yaml_file:
-            pipeline_config = yaml.safe_load(yaml_file)
-    else:
-        raise Exception(
-            f"Missing {yaml_file_path} file! Please create the yaml file with at least a `name` key for the pipeline name."
-        )
 
-    # set schedule
-    schedule.every(pipeline_config.get("schedule").get("run_seconds")).seconds.do(
-        pipeline,
-        config=pipeline_config.get("config"),
-    )
+# # if we want to this pipeline continuously, without cloud scheduler
+# if __name__ == "__main__":
+#     # set up environment variables
+#     load_dotenv()
 
-    while True:
-        schedule.run_pending()
-        time.sleep(pipeline_config.get("schedule").get("poll_seconds"))
+#     # get config variables
+#     yaml_file_path = __file__.replace(".py", ".yaml")
+#     if Path(yaml_file_path).exists():
+#         with open(yaml_file_path) as yaml_file:
+#             pipeline_config = yaml.safe_load(yaml_file)
+#     else:
+#         raise Exception(
+#             f"Missing {yaml_file_path} file! Please create the yaml file with at least a `name` key for the pipeline name."
+#         )
+
+#     # set schedule
+#     schedule.every(pipeline_config.get("schedule").get("run_seconds")).seconds.do(
+#         run_pipeline,
+#         config=pipeline_config.get("config"),
+#     )
+
+#     while True:
+#         schedule.run_pending()
+#         time.sleep(pipeline_config.get("schedule").get("poll_seconds"))
 
